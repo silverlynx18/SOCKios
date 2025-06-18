@@ -1,28 +1,47 @@
 import UIKit
-import FirebaseAuth
+// Remove: import FirebaseAuth - No longer directly needed here for currentUser check
+
+// Import Service Protocols and Implementations
+// Make sure these paths are correct based on your project structure.
+// Assuming they are accessible via module name or bridging header if needed.
+// For this example, direct import if they are in the same module and target.
+// import SockApp.Services.Protocols (if they were a separate module)
+// import SockApp.Services.Firebase (if they were a separate module)
 
 class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
     var window: UIWindow?
+
+    // Instantiate services. These could be in a separate AppServices container/singleton.
+    // For simplicity, keeping them here for now.
+    lazy var authService: AuthServiceProtocol = FirebaseAuthenticationService()
+    lazy var dataStorageService: DataStorageServiceProtocol = FirebaseDataStorageService()
+    lazy var functionsService: FunctionsServiceProtocol = FirebaseFunctionsService()
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
         guard let windowScene = (scene as? UIWindowScene) else { return }
 
         window = UIWindow(windowScene: windowScene)
 
-        // Check if a user is already signed in
-        if Auth.auth().currentUser != nil {
+        // Check if a user is already signed in using the authService
+        if authService.getCurrentUser() != nil {
             // User is signed in, show GroupListViewController
-            let groupListVC = GroupListViewController()
+            // GroupListViewController will also need service injection
+            let groupListVC = GroupListViewController(
+                authService: authService,
+                dataStorageService: dataStorageService,
+                functionsService: functionsService
+            )
             let navController = UINavigationController(rootViewController: groupListVC)
             window?.rootViewController = navController
             print("User is signed in. Starting with GroupListViewController.")
         } else {
             // No user signed in, show LoginViewController
-            let loginVC = LoginViewController()
-            // It's good practice to embed LoginVC in a NavController if it needs a title or might push other VCs before logging in.
-            // However, current LoginVC presents modally, so direct assignment is also fine if it never pushes.
-            // For consistency with GroupList, let's wrap it.
+            let loginVC = LoginViewController(
+                authService: authService,
+                dataStorageService: dataStorageService,
+                functionsService: functionsService
+            )
             let navController = UINavigationController(rootViewController: loginVC)
             window?.rootViewController = navController
             print("No user signed in. Starting with LoginViewController.")
@@ -31,12 +50,13 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         window?.makeKeyAndVisible()
     }
 
-    func sceneDidDisconnect(_ scene: UIScene) {
-        // Called as the scene is being released by the system.
-        // This occurs shortly after the scene enters the background, or when its session is discarded.
-        // Release any resources associated with this scene that can be re-created the next time the scene connects.
-        // The scene may re-connect later, as its session was not necessarily discarded (see `application:didDiscardSceneSessions` instead).
-    }
+    // ... rest of SceneDelegate remains the same
+    func sceneDidDisconnect(_ scene: UIScene) {}
+    func sceneDidBecomeActive(_ scene: UIScene) {}
+    func sceneWillResignActive(_ scene: UIScene) {}
+    func sceneWillEnterForeground(_ scene: UIScene) {}
+    func sceneDidEnterBackground(_ scene: UIScene) {}
+}
 
     func sceneDidBecomeActive(_ scene: UIScene) {
         // Called when the scene has moved from an inactive state to an active state.

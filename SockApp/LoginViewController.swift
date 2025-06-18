@@ -1,12 +1,14 @@
 import UIKit
-import FirebaseAuth
-import FirebaseFunctions
-import FirebaseFirestore
+// Remove: import FirebaseAuth
+// Remove: import FirebaseFunctions
+// Remove: import FirebaseFirestore
+import FirebaseFirestore // Still needed for Timestamp, consider moving Timestamp to a model or using Date directly. Or ensure DataStorageService handles Date to Timestamp conversion.
+
+// Make sure model and DTOs are found.
+// e.g. import SockApp.Models (if you have a module for models)
 
 class LoginViewController: UIViewController {
 
-    // IBOutlets are typically connected in Interface Builder (Storyboard/XIB)
-    // For this placeholder, we'll just declare them.
     var usernameTextField: UITextField!
     var emailTextField: UITextField!
     var passwordTextField: UITextField!
@@ -15,113 +17,124 @@ class LoginViewController: UIViewController {
     var activityIndicator: UIActivityIndicatorView!
     var availabilityLabel: UILabel!
 
-    lazy var functions = Functions.functions()
-    lazy var db = Firestore.firestore()
+    // Service dependencies
+    private let authService: AuthServiceProtocol
+    private let dataStorageService: DataStorageServiceProtocol
+    private let functionsService: FunctionsServiceProtocol
 
-    // Simple state to toggle UI for login/signup
     var isSignUpMode: Bool = false {
         didSet {
             usernameTextField.isHidden = !isSignUpMode
-            // You might want to change button titles or other UI elements here
+            signUpButton.setTitle(isSignUpMode ? "Sign Up" : "Switch to Sign Up", for: .normal)
+            loginButton.setTitle(isSignUpMode ? "Switch to Login" : "Login", for: .normal)
         }
+    }
+
+    // Initializer for dependency injection
+    init(authService: AuthServiceProtocol, dataStorageService: DataStorageServiceProtocol, functionsService: FunctionsServiceProtocol) {
+        self.authService = authService
+        self.dataStorageService = dataStorageService
+        self.functionsService = functionsService
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented - use init(authService:dataStorageService:functionsService:)")
     }
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        // Basic setup - in a real app, you'd add these to the view, set constraints, etc.
         title = "Login / Sign Up"
+        view.backgroundColor = .white // Ensure view has a background color for visibility
+        setupUI()
+        usernameTextField.addTarget(self, action: #selector(usernameDidChange(_:)), for: .editingDidEnd)
+    }
 
+    func setupUI() {
         usernameTextField = UITextField()
         usernameTextField.placeholder = "Username"
         usernameTextField.borderStyle = .roundedRect
-        usernameTextField.isHidden = true // Initially hidden
+        usernameTextField.autocorrectionType = .no
+        usernameTextField.autocapitalizationType = .none
+        usernameTextField.isHidden = true
 
         emailTextField = UITextField()
         emailTextField.placeholder = "Email"
         emailTextField.borderStyle = .roundedRect
+        emailTextField.keyboardType = .emailAddress
+        emailTextField.autocorrectionType = .no
         emailTextField.autocapitalizationType = .none
-        // Add to view hierarchy and set constraints...
 
         passwordTextField = UITextField()
         passwordTextField.placeholder = "Password"
         passwordTextField.isSecureTextEntry = true
         passwordTextField.borderStyle = .roundedRect
-        // Add to view hierarchy and set constraints...
 
         availabilityLabel = UILabel()
         availabilityLabel.text = ""
         availabilityLabel.textAlignment = .center
+        availabilityLabel.font = .systemFont(ofSize: 14)
 
         activityIndicator = UIActivityIndicatorView(style: .medium)
         activityIndicator.hidesWhenStopped = true
 
-
         signUpButton = UIButton(type: .system)
         signUpButton.setTitle("Switch to Sign Up", for: .normal)
         signUpButton.addTarget(self, action: #selector(signUpOrSwitchModeTapped(_:)), for: .touchUpInside)
-        // Add to view hierarchy and set constraints...
 
         loginButton = UIButton(type: .system)
         loginButton.setTitle("Login", for: .normal)
         loginButton.addTarget(self, action: #selector(loginTapped(_:)), for: .touchUpInside)
-        // Add to view hierarchy and set constraints...
 
-        // Example of how you might lay them out programmatically (very basic)
         let stackView = UIStackView(arrangedSubviews: [usernameTextField, emailTextField, passwordTextField, availabilityLabel, activityIndicator, signUpButton, loginButton])
         stackView.axis = .vertical
-        stackView.spacing = 10
+        stackView.spacing = 12
         stackView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(stackView)
 
         NSLayoutConstraint.activate([
             stackView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             stackView.centerYAnchor.constraint(equalTo: view.centerYAnchor),
-            stackView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
-            stackView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20)
+            stackView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 30),
+            stackView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -30)
         ])
-
-        // Add a target to check username availability when the text field loses focus
-        usernameTextField.addTarget(self, action: #selector(usernameDidChange(_:)), for: .editingDidEnd)
     }
 
     @objc func usernameDidChange(_ textField: UITextField) {
-        guard let username = textField.text, !username.isEmpty else {
+        guard let username = textField.text?.trimmingCharacters(in: .whitespacesAndNewlines), !username.isEmpty else {
             availabilityLabel.text = ""
             return
         }
+        // Optional: Add a small delay (e.g., 0.3s) before calling checkUsername to avoid API spamming while typing.
+        // For now, direct call on editingDidEnd.
         checkUsername(username: username)
     }
 
-    func checkUsername(username: String, completion: ((Bool, Error?) -> Void)? = nil) {
+    func checkUsername(username: String, completion внешнего_вызова: ((Bool, Error?) -> Void)? = nil) {
+        // 'completion' here is renamed to 'внешнего_вызова' to avoid conflict with service completion blocks.
         print("Checking username: \(username)")
-        setLoadingState(true, for: [signUpButton, loginButton]) // Disable buttons
+        // Only set loading state for the availability label and potentially the username field itself.
+        // The main buttons (sign up/login) have their own loading state management when an action is tapped.
         availabilityLabel.text = "Checking..."
-        // activityIndicator is part of the stack view, already visible if animating
+        availabilityLabel.textColor = .gray
 
-        functions.httpsCallable("checkUsernameAvailability").call(["username": username]) { [weak self] result, error in
+        let request = CheckUsernameAvailabilityRequest(username: username)
+        functionsService.callFunction(
+            name: "checkUsernameAvailability",
+            data: request,
+            responseType: CheckUsernameAvailabilityResponse.self
+        ) { [weak self] result in
             DispatchQueue.main.async {
-                // setLoadingState will be called by the calling function (signUpOrSwitchModeTapped)
-                // self?.setLoadingState(false, for: [self!.signUpButton, self!.loginButton])
-                // self?.activityIndicator.stopAnimating() // Handled by setLoadingState
-
-                if let error = error as NSError? {
-                    if error.domain == FunctionsErrorDomain {
-                        let code = FunctionsErrorCode(rawValue: error.code)
-                        let message = error.localizedDescription
-                        let details = error.userInfo[FunctionsErrorDetailsKey]
-                        print("Error calling function: \(String(describing: code)), \(message), \(String(describing: details))")
-                    }
-                    self?.availabilityLabel.text = "Error checking username."
-                    completion?(false, error)
-                    return
-                }
-                if let data = result?.data as? [String: Any], let isAvailable = data["isAvailable"] as? Bool {
-                    self?.availabilityLabel.text = isAvailable ? "Username available" : "Username taken"
-                    self?.availabilityLabel.textColor = isAvailable ? .systemGreen : .systemRed
-                    completion?(isAvailable, nil)
-                } else {
-                    self?.availabilityLabel.text = "Could not parse response."
-                    completion?(false, nil) // Or a custom error
+                switch result {
+                case .success(let response):
+                    self?.availabilityLabel.text = response.isAvailable ? "Username available" : "Username taken"
+                    self?.availabilityLabel.textColor = response.isAvailable ? .systemGreen : .systemRed
+                    внешнего_вызова?(response.isAvailable, nil)
+                case .failure(let error):
+                    print("Error calling checkUsernameAvailability function: \(error)")
+                    self?.availabilityLabel.text = "Error checking."
+                    self?.availabilityLabel.textColor = .systemRed
+                    внешнего_вызова?(false, error)
                 }
             }
         }
@@ -130,140 +143,119 @@ class LoginViewController: UIViewController {
     @IBAction func signUpOrSwitchModeTapped(_ sender: UIButton) {
         if !isSignUpMode {
             isSignUpMode = true
-            signUpButton.setTitle("Sign Up", for: .normal)
-            loginButton.setTitle("Switch to Login", for: .normal)
-            availabilityLabel.text = "" // Clear previous messages
-            print("Switched to Sign Up mode")
+            // availabilityLabel.text = "" // Clear previous availability messages
             return
         }
 
-        print("Sign Up button tapped")
+        // Sign Up action
         guard let email = emailTextField.text, !email.isEmpty,
               let password = passwordTextField.text, !password.isEmpty,
-              let username = usernameTextField.text, !username.isEmpty else {
+              let username = usernameTextField.text?.trimmingCharacters(in: .whitespacesAndNewlines), !username.isEmpty else {
             showAlert(title: "Missing Fields", message: "Please fill in username, email, and password.")
             return
         }
+        if !isValidEmail(email) { showAlert(title: "Invalid Email", message: "Please enter a valid email address."); return }
+        if password.count < 6 { showAlert(title: "Weak Password", message: "Password must be at least 6 characters long."); return }
 
-        // Basic email validation
-        if !isValidEmail(email) {
-            showAlert(title: "Invalid Email", message: "Please enter a valid email address.")
-            return
-        }
+        setLoadingState(true, forMainActions: true)
 
-        // Basic password validation (e.g., minimum length)
-        if password.count < 6 {
-            showAlert(title: "Weak Password", message: "Password must be at least 6 characters long.")
-            return
-        }
-
-        activityIndicator.startAnimating()
-        // 1. Check username availability
+        // 1. Re-check username availability right before signup attempt for robustness
         checkUsername(username: username) { [weak self] (isAvailable, error) in
-            guard let self = self else {
-                completion?(false, error)
-                return
-            }
-            // Note: activityIndicator and button disabling is handled by the caller of checkUsername (signUpTapped)
+            guard let self = self else { return }
 
             if let error = error {
-                self.showAlert(title: "Username Check Error", message: error.localizedDescription)
-                completion?(false, error)
+                self.setLoadingState(false, forMainActions: true)
+                self.showAlert(title: "Username Check Error", message: "Could not verify username. \(error.localizedDescription)")
                 return
             }
 
             guard isAvailable else {
+                self.setLoadingState(false, forMainActions: true)
                 self.showAlert(title: "Username Taken", message: "This username is already taken. Please choose another one.")
-                completion?(false, nil) // Not an error, but unavailable
                 return
             }
 
-            // Username is available
-            // 2. Proceed to create user (Auth and Firestore)
-            self.setLoadingState(true, for: [self.signUpButton, self.loginButton]) // Ensure loading state continues for Auth/DB operations
-            Auth.auth().createUser(withEmail: email, password: password) { authResult, authError in
-                if let authError = authError {
-                    self.setLoadingState(false, for: [self.signUpButton, self.loginButton])
-                    self.showAlert(title: "Registration Error", message: authError.localizedDescription)
-                    return
-                }
+            // 2. Username is available, proceed with Auth sign up
+            self.authService.signUp(email: email, password: password, username: username) { [weak self] authResult in
+                guard let self = self else { return }
+                switch authResult {
+                case .success(let authUser):
+                    print("User created successfully via authService: \(authUser.uid)")
 
-                guard let user = authResult?.user else {
-                    self.setLoadingState(false, for: [self.signUpButton, self.loginButton])
-                    self.showAlert(title: "Registration Error", message: "Could not get user after creation.")
-                    return
-                }
+                    let userProfile = UserProfile(
+                        id: authUser.uid,
+                        username: username,
+                        email: email,
+                        createdAt: Timestamp(date: Date()), // Firestore Timestamp
+                        groups: [],
+                        globalStatusId: nil,
+                        groupSpecificStatuses: [:]
+                    )
 
-                print("User created successfully: \(user.uid) with email: \(email)")
+                    self.dataStorageService.createUserProfile(uid: authUser.uid, data: userProfile) { [weak self] profileResult in
+                        guard let self = self else { return }
+                        self.setLoadingState(false, forMainActions: true)
 
-                let userData: [String: Any] = [
-                    "username": username,
-                    "email": email,
-                    "createdAt": Timestamp(date: Date()),
-                    "groups": [],
-                    "globalStatusId": NSNull(),
-                    "groupSpecificStatuses": [:]
-                ]
-
-                self.db.collection("users").document(user.uid).setData(userData) { firestoreError in
-                    self.setLoadingState(false, for: [self.signUpButton, self.loginButton])
-                    if let firestoreError = firestoreError {
-                        print("Error writing user document: \(firestoreError)")
-                        // Potentially delete the Firebase Auth user if Firestore write fails, or queue for retry
-                        // For now, just show error. User exists in Auth but not DB.
-                        self.showAlert(title: "Registration Error", message: "Failed to save user profile: \(firestoreError.localizedDescription)")
-                    } else {
-                        print("User document successfully written for UID: \(user.uid)")
-                        self.navigateToGroupList()
+                        switch profileResult {
+                        case .success:
+                            print("User document successfully written for UID: \(authUser.uid)")
+                            self.navigateToGroupList()
+                        case .failure(let profileError):
+                            print("Error writing user document: \(profileError)")
+                            self.showAlert(title: "Registration Error", message: "Failed to save user profile: \(profileError.localizedDescription)")
+                        }
                     }
+                case .failure(let authError):
+                    self.setLoadingState(false, forMainActions: true)
+                    self.showAlert(title: "Registration Error", message: authError.localizedDescription)
                 }
             }
         }
     }
 
     @IBAction func loginTapped(_ sender: UIButton) {
-        if isSignUpMode {
+        if isSignUpMode { // If in Sign Up mode, this button means "Switch to Login"
             isSignUpMode = false
-            signUpButton.setTitle("Switch to Sign Up", for: .normal)
-            loginButton.setTitle("Login", for: .normal)
-            availabilityLabel.text = "" // Clear previous messages
-            print("Switched to Login mode")
+            // availabilityLabel.text = "" // Clear previous availability messages
             return
         }
 
-        print("Login button tapped")
+        // Login action
         guard let email = emailTextField.text, !email.isEmpty,
               let password = passwordTextField.text, !password.isEmpty else {
             showAlert(title: "Missing Fields", message: "Please fill in email and password.")
             return
         }
 
-        setLoadingState(true, for: [loginButton, signUpButton])
-        Auth.auth().signIn(withEmail: email, password: password) { [weak self] authResult, error in
+        setLoadingState(true, forMainActions: true)
+        authService.login(email: email, password: password) { [weak self] result in
             guard let self = self else { return }
-            self.setLoadingState(false, for: [self.loginButton, self.signUpButton])
+            self.setLoadingState(false, forMainActions: true)
 
-            if let error = error {
+            switch result {
+            case .success(let authUser):
+                print("User logged in successfully: \(authUser.uid)")
+                self.navigateToGroupList()
+            case .failure(let error):
                 self.showAlert(title: "Login Error", message: error.localizedDescription)
-                return
             }
-            print("User logged in successfully: \(authResult?.user.uid ?? "No UID")")
-            self.navigateToGroupList()
         }
     }
 
-    private func setLoadingState(_ isLoading: Bool, for buttons: [UIButton]) {
+    private func setLoadingState(_ isLoading: Bool, forMainActions: Bool) {
+        // Disables/Enables main action buttons (Login/Sign Up) and text fields
         if isLoading {
             activityIndicator.startAnimating()
-            buttons.forEach { $0.isEnabled = false }
-            // Potentially disable text fields too
+            signUpButton.isEnabled = false
+            loginButton.isEnabled = false
             usernameTextField.isEnabled = false
             emailTextField.isEnabled = false
             passwordTextField.isEnabled = false
         } else {
             activityIndicator.stopAnimating()
-            buttons.forEach { $0.isEnabled = true }
-            usernameTextField.isEnabled = true
+            signUpButton.isEnabled = true
+            loginButton.isEnabled = true
+            usernameTextField.isEnabled = true // Or keep username disabled if availability check is ongoing
             emailTextField.isEnabled = true
             passwordTextField.isEnabled = true
         }
@@ -271,11 +263,14 @@ class LoginViewController: UIViewController {
 
     func navigateToGroupList() {
         DispatchQueue.main.async {
-            let groupListVC = GroupListViewController()
+            let groupListVC = GroupListViewController(
+                authService: self.authService,
+                dataStorageService: self.dataStorageService,
+                functionsService: self.functionsService
+            )
             let navController = UINavigationController(rootViewController: groupListVC)
             navController.modalPresentationStyle = .fullScreen
 
-            // Attempt to get the window scene and set the root view controller
             if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
                let sceneDelegate = windowScene.delegate as? SceneDelegate,
                let window = sceneDelegate.window {
@@ -283,21 +278,17 @@ class LoginViewController: UIViewController {
                 window.makeKeyAndVisible()
                 UIView.transition(with: window, duration: 0.3, options: .transitionCrossDissolve, animations: nil, completion: nil)
             } else {
-                // Fallback for environments where SceneDelegate might not be available (e.g. older projects or testing)
-                // This might not be ideal if LoginVC is not the root or is presented modally itself.
                 self.present(navController, animated: true, completion: nil)
             }
         }
     }
 
-    // Helper for basic email validation
     func isValidEmail(_ email: String) -> Bool {
         let emailRegEx = "[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,64}"
         let emailPred = NSPredicate(format:"SELF MATCHES %@", emailRegEx)
         return emailPred.evaluate(with: email)
     }
 
-    // Helper to show alerts
     func showAlert(title: String, message: String, completion: (() -> Void)? = nil) {
         DispatchQueue.main.async {
             let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
