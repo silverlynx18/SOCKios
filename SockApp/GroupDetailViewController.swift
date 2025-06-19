@@ -358,7 +358,7 @@ class GroupDetailViewController: UIViewController {
 
                 if let error = error {
                     print("Error listening to group updates: \(error)")
-                    self.showAlert(title: "Error", message: "Could not get group updates. \(error.localizedDescription)")
+                    self.showAlert(title: "UpdateError", message: "Could not get group updates: \(error.localizedDescription). Please try refreshing.")
                     return
                 }
 
@@ -387,7 +387,7 @@ class GroupDetailViewController: UIViewController {
                     // self.updateNoMembersLabelVisibility() // Called within populateGroupDetails via updateDisplayMembers
                 } catch {
                     print("Error decoding updated group data: \(error)")
-                    self.showAlert(title: "Update Error", message: "Could not process group updates.")
+                    self.showAlert(title: "Update Error", message: "Could not process group updates. Some information may be outdated.")
                 }
             }
     }
@@ -444,10 +444,10 @@ class GroupDetailViewController: UIViewController {
             if let details = error.userInfo[FunctionsErrorDetailsKey] as? [String: Any], let message = details["message"] as? String {
                  errorMessage = message
             } else { // Fallback to generic Firebase error if no custom message from details
-                errorMessage = error.localizedDescription
+                errorMessage = "There was a problem with the request: \(error.localizedDescription). Please try again."
             }
         } else { // Non-Firebase function error
-             errorMessage = error.localizedDescription
+             errorMessage = "An unexpected error occurred: \(error.localizedDescription). Please try again."
         }
         print("Firebase Function Error: \(errorMessage), details: \(error.userInfo)")
         showAlert(title: "Error", message: errorMessage)
@@ -531,7 +531,7 @@ class GroupDetailViewController: UIViewController {
                 self?.activityIndicator.stopAnimating()
                 if let error = error {
                     print("Error updating group details: \(error)")
-                    self?.showAlert(title: "Update Error", message: "Failed to save changes: \(error.localizedDescription)")
+                    self?.showAlert(title: "Update Error", message: "Failed to save changes: \(error.localizedDescription). Please try again.")
                 } else {
                     print("Group details updated successfully.")
                     self?.showAlert(title: "Success", message: "Group details for '\(newGroupName)' saved successfully.")
@@ -567,7 +567,7 @@ class GroupDetailViewController: UIViewController {
                 self?.activityIndicator.stopAnimating()
                 if let error = error {
                     print("Error updating group-specific status: \(error.localizedDescription)")
-                    self?.showAlert(title: "Update Error", message: "Failed to set status: \(error.localizedDescription)")
+                    self?.showAlert(title: "Update Error", message: "Failed to set your status for this group: \(error.localizedDescription). Please try again.")
                 } else {
                     print("Group-specific status updated successfully.")
                     self?.showAlert(title: "Success", message: "Your status for '\(self.group.groupName ?? "this group")' has been updated!")

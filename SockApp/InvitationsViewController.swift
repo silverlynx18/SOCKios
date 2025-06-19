@@ -83,7 +83,7 @@ class InvitationsViewController: UIViewController {
 
                 if let error = error {
                     print("Error fetching invitations: \(error)")
-                    self.showAlert(title: "Error", message: "Could not load invitations. \(error.localizedDescription)")
+                    self.showAlert(title: "Loading Error", message: "Could not load invitations: \(error.localizedDescription). Please try again.")
                     return
                 }
 
@@ -192,10 +192,10 @@ class InvitationsViewController: UIViewController {
             if let details = error.userInfo[FunctionsErrorDetailsKey] as? [String: Any], let message = details["message"] as? String {
                  errorMessage = message
             } else {
-                errorMessage = error.localizedDescription // Fallback to generic Firebase error if no custom message
+                errorMessage = "There was a problem: \(error.localizedDescription). Please try again." // Fallback to generic Firebase error
             }
         } else {
-             errorMessage = error.localizedDescription // Non-Firebase function error
+             errorMessage = "An unexpected error occurred: \(error.localizedDescription). Please try again." // Non-Firebase function error
         }
         print("Firebase Function Error: \(errorMessage), details: \(error.userInfo)")
         showAlert(title: "Error", message: errorMessage)

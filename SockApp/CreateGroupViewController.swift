@@ -123,16 +123,18 @@ class CreateGroupViewController: UIViewController {
                         let message = error.localizedDescription
                         let details = error.userInfo[FunctionsErrorDetailsKey]
                         print("Error calling createGroup function: \(String(describing: code)), \(message), \(String(describing: details))")
-                        self?.showAlert(title: "Creation Error", message: "Failed to create group: \(message)")
+                        self?.showAlert(title: "Creation Error", message: "Failed to create group: \(message). Please try again.")
                     } else {
-                        self?.showAlert(title: "Creation Error", message: "An unexpected error occurred: \(error.localizedDescription)")
+                        self?.showAlert(title: "Creation Error", message: "An unexpected error occurred while creating the group: \(error.localizedDescription). Please try again.")
                     }
                     return
                 }
 
                 guard let data = result?.data as? [String: Any], let groupId = data["groupId"] as? String else {
                     print("createGroup function returned unexpected data or no groupId: \(String(describing: result?.data))")
-                    self?.showAlert(title: "Creation Error", message: "Group created, but couldn't get group ID or invite code from response.") {
+                    // Ensure loading state is reset before showing alert and dismissing
+                    self.setLoadingState(false)
+                    self.showAlert(title: "Creation Error", message: "Group created, but couldn't get group ID or invite code from response.") {
                         // Still dismiss as the group might have been created. User's list will update.
                         self.dismiss(animated: true, completion: nil)
                     }
@@ -150,7 +152,7 @@ class CreateGroupViewController: UIViewController {
                             self.setLoadingState(false) // Final loading state change
                             if let err = err {
                                 print("Error updating group with inviteLinkCode: \(err)")
-                                self.showAlert(title: "Group Created (with warning)", message: "Group '\(groupName)' created, but there was an issue saving its invite code: \(err.localizedDescription). Invite Code: \(code)") {
+                                self.showAlert(title: "Group Created (with warning)", message: "Group '\(groupName)' created, but failed to save its invite code: \(err.localizedDescription). You can find the invite code later in group details. Invite Code: \(code)") {
                                     self.dismiss(animated: true, completion: nil)
                                 }
                             } else {
