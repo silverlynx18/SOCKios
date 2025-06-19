@@ -3,6 +3,9 @@ import FirebaseAuth
 import FirebaseFirestore
 import FirebaseFunctions // Import FirebaseFunctions
 
+// Simple in-memory image cache
+let imageCache = NSCache<NSString, UIImage>()
+
 class GroupListViewController: UIViewController {
 
     var tableView: UITableView!
@@ -113,7 +116,7 @@ class GroupListViewController: UIViewController {
             try Auth.auth().signOut()
             navigateToLogin()
         } catch let signOutError {
-            showAlert(title: "Sign Out Error", message: "Could not sign out: \(signOutError.localizedDescription)")
+            showAlert(title: "Sign Out Error", message: "Could not sign out: \(signOutError.localizedDescription). Please try again.")
         }
     }
 
@@ -164,7 +167,7 @@ class GroupListViewController: UIViewController {
                         // e.g. .notFound, .alreadyExists etc.
                     }
                     print("Error processing invite code: \(errorMessage), details: \(error.userInfo)")
-                    self?.showAlert(title: "Error Processing Code", message: errorMessage)
+                    self?.showAlert(title: "Error Processing Code", message: "\(errorMessage). Please check the code and try again.")
                     return
                 }
 
@@ -204,7 +207,7 @@ class GroupListViewController: UIViewController {
 
                 if let error = error {
                     print("Error fetching user document: \(error)")
-                    self.showAlert(title: "Error", message: "Could not load your group information. \(error.localizedDescription)")
+                    self.showAlert(title: "Loading Error", message: "Could not load your group information: \(error.localizedDescription). Please try again later.")
                     self.activityIndicator.stopAnimating() // Ensure indicator stops on error
                     return
                 }
@@ -277,7 +280,7 @@ class GroupListViewController: UIViewController {
             if let error = anyError { // If any error occurred during fetching individual groups
                  // Only show alert if no groups were fetched at all, otherwise partial data might be ok
                 if fetchedGroups.isEmpty {
-                    self.showAlert(title: "Error Fetching Groups", message: "Some group details could not be loaded. \(error.localizedDescription)")
+                    self.showAlert(title: "Error Fetching Groups", message: "Some group details could not be loaded: \(error.localizedDescription). The list might be incomplete.")
                 }
             }
 
@@ -334,9 +337,42 @@ extension GroupListViewController: UITableViewDataSource, UITableViewDelegate {
         let cell = tableView.dequeueReusableCell(withIdentifier: "GroupCell", for: indexPath)
         let group = groups[indexPath.row]
         cell.textLabel?.text = group.groupName
-        // TODO: Add async image loading for groupProfilePictureUrl
-        // TODO: Set cell accessory type for navigation to group chat (later subtask)
-        cell.accessoryType = .disclosureIndicator // Placeholder for tapping a group
+        cell.imageView?.image = UIImage(systemName: "person.circle") // Placeholder
+
+        if let profilePictureUrlString = group.groupProfilePictureUrl, let url = URL(string: profilePictureUrlString) {
+            // Check cache first
+            if let cachedImage = imageCache.object(forKey: url.absoluteString as NSString) {
+                cell.imageView?.image = cachedImage
+            } else {
+                // Download image asynchronously
+                URLSession.shared.dataTask(with: url) { data, response, error in
+                    guard let data = data, error == nil, let image = UIImage(data: data) else {
+                        // Keep placeholder if download fails
+                        DispatchQueue.main.async {
+                            // Ensure the cell is still relevant
+                            if let updateCell = tableView.cellForRow(at: indexPath) {
+                                updateCell.imageView?.image = UIImage(systemName: "person.circle.fill") // Or a different error placeholder
+                            }
+                        }
+                        return
+                    }
+                    // Cache the downloaded image
+                    imageCache.setObject(image, forKey: url.absoluteString as NSString)
+                    DispatchQueue.main.async {
+                        // Ensure the cell is still relevant before updating
+                        if let updateCell = tableView.cellForRow(at: indexPath) {
+                            updateCell.imageView?.image = image
+                            updateCell.setNeedsLayout() // May be needed for image to appear correctly
+                        }
+                    }
+                }.resume()
+            }
+        } else {
+            // No URL, ensure placeholder is set (already done initially, but good for clarity)
+            cell.imageView?.image = UIImage(systemName: "person.circle")
+        }
+
+        cell.accessoryType = .disclosureIndicator
         return cell
     }
 
@@ -457,7 +493,7 @@ extension GroupListViewController: UITableViewDataSource, UITableViewDelegate {
                         }
                     }
                     print("Error calling processBlindUsernameInvite: \(errorMessage), details: \(error.userInfo)")
-                    self?.showAlert(title: "Invite Error", message: errorMessage)
+                    self?.showAlert(title: "Invite Error", message: "Failed to send invite: \(errorMessage). Please try again.")
                     return
                 }
 

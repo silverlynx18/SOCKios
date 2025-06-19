@@ -150,7 +150,7 @@ class ProfileViewController: UIViewController {
 
                 if let error = error {
                     print("Error listening to user profile updates: \(error.localizedDescription)")
-                    self.showAlert(title: "Error", message: "Could not load profile data. \(error.localizedDescription)")
+                    self.showAlert(title: "Loading Error", message: "Could not load your profile data: \(error.localizedDescription). Please try again.")
                     return
                 }
 
@@ -166,7 +166,7 @@ class ProfileViewController: UIViewController {
                     self.updateUIWithUserProfileData()
                 } catch {
                     print("Error decoding user profile: \(error)")
-                    self.showAlert(title: "Data Error", message: "Could not parse profile data.")
+                    self.showAlert(title: "Data Error", message: "Could not parse your profile data. Please try again.")
                 }
             }
     }
@@ -209,7 +209,7 @@ class ProfileViewController: UIViewController {
                 self.setLoadingState(false, for: [self.setGlobalStatusButton, self.deleteAccountButton], textFields: [self.globalStatusTextField])
                 if let error = error {
                     print("Error updating global status: \(error.localizedDescription)")
-                    self.showAlert(title: "Update Error", message: "Failed to set global status: \(error.localizedDescription)")
+                    self.showAlert(title: "Update Error", message: "Failed to set your global status: \(error.localizedDescription). Please try again.")
                 } else {
                     print("Global status updated successfully.")
                     self.showAlert(title: "Success", message: "Global status updated!")
@@ -257,7 +257,7 @@ class ProfileViewController: UIViewController {
                         let details = error.userInfo[FunctionsErrorDetailsKey]
                         print("Error calling deleteUserAccount function: \(String(describing: code)), \(message), \(String(describing: details))")
                     }
-                    self?.showAlert(title: "Deletion Error", message: "Failed to delete account: \(error.localizedDescription)")
+                    self?.showAlert(title: "Deletion Error", message: "Failed to delete your account: \(error.localizedDescription). Please try again.")
                     return
                 }
 
@@ -302,7 +302,7 @@ class ProfileViewController: UIViewController {
             dismissToLogin()
         } catch let signOutError {
             print("Error signing out: \(signOutError.localizedDescription)")
-            showAlert(title: "Sign Out Error", message: "Could not sign you out at this time: \(signOutError.localizedDescription)")
+            showAlert(title: "Sign Out Error", message: "Could not sign you out at this time: \(signOutError.localizedDescription). Please try again.")
         }
     }
 

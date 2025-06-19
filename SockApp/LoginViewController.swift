@@ -100,9 +100,14 @@ class LoginViewController: UIViewController {
 
         functions.httpsCallable("checkUsernameAvailability").call(["username": username]) { [weak self] result, error in
             DispatchQueue.main.async {
-                // setLoadingState will be called by the calling function (signUpOrSwitchModeTapped)
-                // self?.setLoadingState(false, for: [self!.signUpButton, self!.loginButton])
-                // self?.activityIndicator.stopAnimating() // Handled by setLoadingState
+                guard let self = self else {
+                    completion?(false, error)
+                    return
+                }
+
+                // Always ensure loading state is reset before calling completion
+                self.setLoadingState(false, for: [self.signUpButton, self.loginButton])
+                // self.activityIndicator.stopAnimating() // Handled by setLoadingState
 
                 if let error = error as NSError? {
                     if error.domain == FunctionsErrorDomain {
@@ -111,16 +116,16 @@ class LoginViewController: UIViewController {
                         let details = error.userInfo[FunctionsErrorDetailsKey]
                         print("Error calling function: \(String(describing: code)), \(message), \(String(describing: details))")
                     }
-                    self?.availabilityLabel.text = "Error checking username."
+                    self.availabilityLabel.text = "Error checking username."
                     completion?(false, error)
                     return
                 }
                 if let data = result?.data as? [String: Any], let isAvailable = data["isAvailable"] as? Bool {
-                    self?.availabilityLabel.text = isAvailable ? "Username available" : "Username taken"
-                    self?.availabilityLabel.textColor = isAvailable ? .systemGreen : .systemRed
+                    self.availabilityLabel.text = isAvailable ? "Username available" : "Username taken"
+                    self.availabilityLabel.textColor = isAvailable ? .systemGreen : .systemRed
                     completion?(isAvailable, nil)
                 } else {
-                    self?.availabilityLabel.text = "Could not parse response."
+                    self.availabilityLabel.text = "Could not parse response."
                     completion?(false, nil) // Or a custom error
                 }
             }
@@ -160,31 +165,34 @@ class LoginViewController: UIViewController {
         activityIndicator.startAnimating()
         // 1. Check username availability
         checkUsername(username: username) { [weak self] (isAvailable, error) in
-            guard let self = self else {
-                completion?(false, error)
-                return
-            }
-            // Note: activityIndicator and button disabling is handled by the caller of checkUsername (signUpTapped)
+            guard let self = self else { return }
+            // setLoadingState for checkUsername is handled within its own completion block now.
 
             if let error = error {
-                self.showAlert(title: "Username Check Error", message: error.localizedDescription)
-                completion?(false, error)
+                self.setLoadingState(false, for: [self.signUpButton, self.loginButton]) // Ensure UI is re-enabled
+                self.showAlert(title: "Username Check Error", message: "Could not check username: \(error.localizedDescription). Please try again.")
+                // No completion() call here as this is the end of this specific action flow for sign up
                 return
             }
 
             guard isAvailable else {
+                self.setLoadingState(false, for: [self.signUpButton, self.loginButton]) // Ensure UI is re-enabled
                 self.showAlert(title: "Username Taken", message: "This username is already taken. Please choose another one.")
-                completion?(false, nil) // Not an error, but unavailable
+                // No completion() call here
                 return
             }
 
             // Username is available
             // 2. Proceed to create user (Auth and Firestore)
-            self.setLoadingState(true, for: [self.signUpButton, self.loginButton]) // Ensure loading state continues for Auth/DB operations
+            // setLoadingState(true,...) is called right before Auth.auth().createUser
+            // No need to call it here again, as it was called at the start of checkUsername
+            // and if we reach here, it means it was reset by checkUsername's completion.
+            // However, we need to set it to true again for the Auth and Firestore operations.
+            self.setLoadingState(true, for: [self.signUpButton, self.loginButton])
             Auth.auth().createUser(withEmail: email, password: password) { authResult, authError in
                 if let authError = authError {
                     self.setLoadingState(false, for: [self.signUpButton, self.loginButton])
-                    self.showAlert(title: "Registration Error", message: authError.localizedDescription)
+                    self.showAlert(title: "Registration Error", message: "Failed to sign up: \(authError.localizedDescription). Please check your details and try again.")
                     return
                 }
 
@@ -211,7 +219,7 @@ class LoginViewController: UIViewController {
                         print("Error writing user document: \(firestoreError)")
                         // Potentially delete the Firebase Auth user if Firestore write fails, or queue for retry
                         // For now, just show error. User exists in Auth but not DB.
-                        self.showAlert(title: "Registration Error", message: "Failed to save user profile: \(firestoreError.localizedDescription)")
+                        self.showAlert(title: "Registration Error", message: "Failed to save your profile: \(firestoreError.localizedDescription). Please try signing up again.")
                     } else {
                         print("User document successfully written for UID: \(user.uid)")
                         self.navigateToGroupList()
@@ -244,7 +252,7 @@ class LoginViewController: UIViewController {
             self.setLoadingState(false, for: [self.loginButton, self.signUpButton])
 
             if let error = error {
-                self.showAlert(title: "Login Error", message: error.localizedDescription)
+                self.showAlert(title: "Login Error", message: "Failed to log in: \(error.localizedDescription). Please check your credentials and try again.")
                 return
             }
             print("User logged in successfully: \(authResult?.user.uid ?? "No UID")")
